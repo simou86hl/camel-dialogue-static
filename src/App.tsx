@@ -14,9 +14,8 @@ function SimpleMarkdown({ content }: { content: string }) {
     const line = lines[i]
     if (line.startsWith('```')) {
       if (inCodeBlock) {
-        elements.push(<pre key={`c-${i}`} className="my-2 p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800 overflow-x-auto text-xs font-mono whitespace-pre"><code>{codeBlockContent.join('\n')}</code></pre>)
-        codeBlockContent = []
-        inCodeBlock = false
+        elements.push(<pre key={`c-${i}`} className="my-2 p-3 rounded-lg bg-zinc-100 overflow-x-auto text-xs font-mono whitespace-pre"><code>{codeBlockContent.join('\n')}</code></pre>)
+        codeBlockContent = []; inCodeBlock = false
       } else { inCodeBlock = true }
       continue
     }
@@ -26,7 +25,7 @@ function SimpleMarkdown({ content }: { content: string }) {
     else if (line.startsWith('# ')) elements.push(<h2 key={i} className="font-bold text-lg mt-3 mb-1">{fmt(line.slice(2))}</h2>)
     else if (line.match(/^[-*]\s/)) elements.push(<li key={i} className="ml-4 list-disc text-sm">{fmt(line.replace(/^[-*]\s/, ''))}</li>)
     else if (line.match(/^\d+\.\s/)) elements.push(<li key={i} className="ml-4 list-decimal text-sm">{fmt(line.replace(/^\d+\.\s/, ''))}</li>)
-    else if (line.match(/^---+$/)) elements.push(<hr key={i} className="my-2 border-gray-300 dark:border-gray-700" />)
+    else if (line.match(/^---+$/)) elements.push(<hr key={i} className="my-2 border-gray-300" />)
     else if (line.trim() === '') elements.push(<div key={i} className="h-2" />)
     else elements.push(<p key={i} className="text-sm leading-relaxed">{fmt(line)}</p>)
   }
@@ -40,7 +39,7 @@ function fmt(text: string): React.ReactNode {
     const bm = rem.match(/\*\*(.+?)\*\*/); const cm = rem.match(/`([^`]+)`/)
     let first: { i: number; l: number; n: React.ReactNode } | null = null
     if (bm && bm.index !== undefined) { const c = { i: bm.index, l: bm[0].length, n: <strong key={`b${k++}`}>{bm[1]}</strong> }; if (!first || c.i < first.i) first = c }
-    if (cm && cm.index !== undefined) { const c = { i: cm.index, l: cm[0].length, n: <code key={`c${k++}`} className="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono">{cm[1]}</code> }; if (!first || c.i < first.i) first = c }
+    if (cm && cm.index !== undefined) { const c = { i: cm.index, l: cm[0].length, n: <code key={`c${k++}`} className="px-1 py-0.5 rounded bg-zinc-100 text-xs font-mono">{cm[1]}</code> }; if (!first || c.i < first.i) first = c }
     if (first) { if (first.i > 0) parts.push(rem.slice(0, first.i)); parts.push(first.n); rem = rem.slice(first.i + first.l) }
     else { parts.push(rem); break }
   }
@@ -60,18 +59,95 @@ function executorPrompt(role: string, otherRole: string, task: string) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Types & Constants
+// Provider & Model Registry
+// ═══════════════════════════════════════════════════════════════
+
+interface ProviderDef {
+  name: string
+  url: string
+  type: 'pollinations' | 'openai' | 'openrouter'
+  models: { id: string; label: string }[]
+}
+
+const PROVIDERS: ProviderDef[] = [
+  {
+    name: 'Pollinations (OpenAI)',
+    url: 'https://text.pollinations.ai/openai/chat/completions',
+    type: 'openai',
+    models: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { id: 'gpt-4o', label: 'GPT-4o' },
+      { id: 'o1-mini', label: 'o1 Mini' },
+      { id: 'mistral-large', label: 'Mistral Large' },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat' },
+      { id: 'claude-hybridspace', label: 'Claude Hybridspace' },
+    ],
+  },
+  {
+    name: 'Pollinations',
+    url: 'https://text.pollinations.ai/',
+    type: 'pollinations',
+    models: [
+      { id: 'openai', label: 'OpenAI' },
+      { id: 'mistral', label: 'Mistral' },
+      { id: 'llama', label: 'LLaMA' },
+      { id: 'deepseek', label: 'DeepSeek' },
+      { id: 'qwen', label: 'Qwen' },
+    ],
+  },
+  {
+    name: 'AirForce',
+    url: 'https://api.airforce/v1/chat/completions',
+    type: 'openai',
+    models: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { id: 'gpt-4o', label: 'GPT-4o' },
+      { id: 'claude-3-haiku', label: 'Claude 3 Haiku' },
+      { id: 'llama-3.1-70b', label: 'LLaMA 3.1 70B' },
+      { id: 'mistral-medium', label: 'Mistral Medium' },
+    ],
+  },
+  {
+    name: 'G4F',
+    url: 'https://api.g4f.chat/v1/chat/completions',
+    type: 'openai',
+    models: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { id: 'gpt-4o', label: 'GPT-4o' },
+      { id: 'claude-3-haiku', label: 'Claude 3 Haiku' },
+      { id: 'gemini-pro', label: 'Gemini Pro' },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat' },
+    ],
+  },
+  {
+    name: 'LLM7',
+    url: 'https://api.llm7.io/v1/chat/completions',
+    type: 'openai',
+    models: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { id: 'gpt-4o', label: 'GPT-4o' },
+      { id: 'claude-3-haiku', label: 'Claude 3 Haiku' },
+      { id: 'llama-3.1-70b', label: 'LLaMA 3.1 70B' },
+    ],
+  },
+  {
+    name: 'OpenRouter (Free)',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    type: 'openrouter',
+    models: [
+      { id: 'meta-llama/llama-3.1-8b-instruct:free', label: 'LLaMA 3.1 8B' },
+      { id: 'google/gemma-2-9b-it:free', label: 'Gemma 2 9B' },
+      { id: 'mistralai/mistral-7b-instruct:free', label: 'Mistral 7B' },
+      { id: 'qwen/qwen-2-7b-instruct:free', label: 'Qwen 2 7B' },
+    ],
+  },
+]
+
+// ═══════════════════════════════════════════════════════════════
+// Types
 // ═══════════════════════════════════════════════════════════════
 
 interface Turn { speaker: 'instructor' | 'executor'; role: string; content: string; provider?: string; model?: string }
-
-const PROXIES = [
-  { name: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations' },
-  { name: 'Pollinations (OpenAI)', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai' },
-  { name: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai' },
-  { name: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai' },
-  { name: 'LLM7', url: 'https://api.llm7.io/v1/chat/completions', type: 'openai' },
-]
 
 const EXAMPLES = [
   { task: 'Design a REST API for a todo application with user authentication', instructor: 'Product Manager', executor: 'Senior Backend Engineer' },
@@ -82,41 +158,75 @@ const EXAMPLES = [
 ]
 
 // ═══════════════════════════════════════════════════════════════
-// API Call — Free Proxies (client-side, CORS supported)
+// API Call — Free Proxies (client-side)
 // ═══════════════════════════════════════════════════════════════
 
 async function callAI(
   messages: { role: string; content: string }[],
-  signal?: AbortSignal
-): Promise<{ content: string; provider: string }> {
-  // Try each proxy with fallback
-  for (const proxy of PROXIES) {
-    try {
-      if (proxy.type === 'pollinations') {
-        const res = await fetch(proxy.url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages, model: 'openai', temperature: 0.7 }),
-          signal,
-        })
-        if (!res.ok) continue
-        const text = await res.text()
-        try { const j = JSON.parse(text); const c = j.choices?.[0]?.message?.content || j.content; if (c) return { content: c, provider: proxy.name } } catch { if (text.trim()) return { content: text.trim(), provider: proxy.name } }
-      } else {
-        const res = await fetch(proxy.url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-4o-mini', messages, temperature: 0.7, max_tokens: 2048 }),
-          signal,
-        })
-        if (!res.ok) continue
-        const data = await res.json()
-        const c = data.choices?.[0]?.message?.content
-        if (c) return { content: c, provider: proxy.name }
-      }
-    } catch { continue }
+  signal: AbortSignal | undefined,
+  selectedProvider: string,
+  selectedModel: string,
+): Promise<{ content: string; provider: string; model: string }> {
+  // If user selected a specific provider + model
+  if (selectedProvider && selectedModel) {
+    const prov = PROVIDERS.find(p => p.name === selectedProvider)
+    if (prov) {
+      const result = await callProvider(prov, selectedModel, messages, signal)
+      if (result) return { content: result, provider: prov.name, model: selectedModel }
+      throw new Error(`${prov.name} with model ${selectedModel} failed. Try another provider or model.`)
+    }
   }
+
+  // If user selected provider only, try all its models
+  if (selectedProvider) {
+    const prov = PROVIDERS.find(p => p.name === selectedProvider)
+    if (prov) {
+      for (const m of prov.models) {
+        const result = await callProvider(prov, m.id, messages, signal)
+        if (result) return { content: result, provider: prov.name, model: m.id }
+      }
+      throw new Error(`All models failed for ${prov.name}. Try another provider.`)
+    }
+  }
+
+  // Auto-fallback: try each provider with first model
+  for (const prov of PROVIDERS) {
+    for (const m of prov.models.slice(0, 2)) {
+      const result = await callProvider(prov, m.id, messages, signal)
+      if (result) return { content: result, provider: prov.name, model: m.id }
+    }
+  }
+
   throw new Error('All proxy providers failed. Please try again.')
+}
+
+async function callProvider(
+  prov: ProviderDef, model: string,
+  messages: { role: string; content: string }[],
+  signal?: AbortSignal,
+): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (prov.type === 'openrouter') {
+      headers['HTTP-Referer'] = 'https://camel-dialogue.tool'
+      headers['X-Title'] = 'CAMEL Dialogue'
+    }
+
+    const body = prov.type === 'pollinations'
+      ? { messages, model, temperature: 0.7 }
+      : { model, messages, temperature: 0.7, max_tokens: 2048 }
+
+    const res = await fetch(prov.url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+    if (!res.ok) return null
+
+    if (prov.type === 'pollinations') {
+      const text = await res.text()
+      try { const j = JSON.parse(text); return j.choices?.[0]?.message?.content || j.content || null } catch { return text.trim() || null }
+    }
+
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content || null
+  } catch { return null }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -125,9 +235,10 @@ async function callAI(
 
 async function runDialogue(params: {
   task: string; instructorRole: string; executorRole: string; maxTurns: number
+  provider: string; model: string
   signal?: AbortSignal; onTurn: (t: Turn) => void
 }) {
-  const { task, instructorRole, executorRole, maxTurns, signal, onTurn } = params
+  const { task, instructorRole, executorRole, maxTurns, provider, model, signal, onTurn } = params
   const iMsgs: { role: string; content: string }[] = [
     { role: 'system', content: instructorPrompt(instructorRole, executorRole, task) },
     { role: 'user', content: 'Now start to give me instructions one by one. Only reply with one Instruction at a time.' },
@@ -136,29 +247,26 @@ async function runDialogue(params: {
     { role: 'system', content: executorPrompt(instructorRole, executorRole, task) },
   ]
 
-  // First turn: instructor
-  let iRes = await callAI(iMsgs, signal)
+  let iRes = await callAI(iMsgs, signal, provider, model)
   iMsgs.push({ role: 'assistant', content: iRes.content })
-  onTurn({ speaker: 'instructor', role: instructorRole, content: iRes.content, provider: iRes.provider })
+  onTurn({ speaker: 'instructor', role: instructorRole, content: iRes.content, provider: iRes.provider, model: iRes.model })
 
   for (let i = 0; i < maxTurns && !(signal?.aborted || iRes.content.includes('<TASK_DONE>')); i++) {
-    // Executor responds
     eMsgs.push({ role: 'user', content: iRes.content })
-    const eRes = await callAI(eMsgs, signal)
+    const eRes = await callAI(eMsgs, signal, provider, model)
     eMsgs.push({ role: 'assistant', content: eRes.content })
-    onTurn({ speaker: 'executor', role: executorRole, content: eRes.content, provider: eRes.provider })
+    onTurn({ speaker: 'executor', role: executorRole, content: eRes.content, provider: eRes.provider, model: eRes.model })
     if (eRes.content.includes('<TASK_DONE>')) break
 
-    // Instructor responds
     iMsgs.push({ role: 'user', content: eRes.content })
-    iRes = await callAI(iMsgs, signal)
+    iRes = await callAI(iMsgs, signal, provider, model)
     iMsgs.push({ role: 'assistant', content: iRes.content })
-    onTurn({ speaker: 'instructor', role: instructorRole, content: iRes.content, provider: iRes.provider })
+    onTurn({ speaker: 'instructor', role: instructorRole, content: iRes.content, provider: iRes.provider, model: iRes.model })
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// App Component
+// App
 // ═══════════════════════════════════════════════════════════════
 
 export default function App() {
@@ -166,6 +274,8 @@ export default function App() {
   const [iRole, setIRole] = useState('Product Manager')
   const [eRole, setERole] = useState('Senior Software Engineer')
   const [maxTurns, setMaxTurns] = useState(8)
+  const [selProvider, setSelProvider] = useState('')
+  const [selModel, setSelModel] = useState('')
   const [msgs, setMsgs] = useState<Turn[]>([])
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
@@ -176,15 +286,20 @@ export default function App() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
 
+  // Get available models based on selected provider
+  const availableModels = selProvider
+    ? PROVIDERS.find(p => p.name === selProvider)?.models || []
+    : PROVIDERS.flatMap(p => p.models)
+
   const start = useCallback(async () => {
     if (!task.trim()) return
     setError(''); setMsgs([]); setRunning(true)
     abortRef.current = new AbortController()
     try {
-      await runDialogue({ task: task.trim(), instructorRole: iRole, executorRole: eRole, maxTurns, signal: abortRef.current.signal, onTurn: (t) => setMsgs(p => [...p, t]) })
+      await runDialogue({ task: task.trim(), instructorRole: iRole, executorRole: eRole, maxTurns, provider: selProvider, model: selModel, signal: abortRef.current.signal, onTurn: (t) => setMsgs(p => [...p, t]) })
     } catch (e: unknown) { const m = e instanceof Error ? e.message : String(e); if (m !== 'The user aborted a request.') setError(m) }
     finally { setRunning(false) }
-  }, [task, iRole, eRole, maxTurns])
+  }, [task, iRole, eRole, maxTurns, selProvider, selModel])
 
   const stop = useCallback(() => { abortRef.current?.abort(); setRunning(false) }, [])
   const reset = useCallback(() => { setMsgs([]); setError(''); setTask('') }, [])
@@ -214,14 +329,15 @@ export default function App() {
           </div>
           {msgs.length > 0 && (
             <div className="flex gap-1">
-              <button onClick={() => setView('chat')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === 'chat' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>Chat</button>
-              <button onClick={() => setView('split')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === 'split' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>Split</button>
+              <button onClick={() => setView('chat')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === 'chat' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>💬 Chat</button>
+              <button onClick={() => setView('split')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === 'split' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>↔ Split</button>
             </div>
           )}
         </div>
 
         {/* Config */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 space-y-3">
+          {/* Roles */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">🧠 Instructor Role</label>
@@ -232,15 +348,52 @@ export default function App() {
               <input value={eRole} onChange={e => setERole(e.target.value)} placeholder="e.g. Senior Engineer" className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
             </div>
           </div>
+
+          {/* Task */}
           <div>
             <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">✨ Mission / Task</label>
             <textarea value={task} onChange={e => setTask(e.target.value)} placeholder="Describe the task the two AI agents should collaborate on..." rows={2} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400" />
           </div>
+
+          {/* ═══ PROVIDER + MODEL SELECTOR ═══ */}
           <div className="flex items-end gap-3 flex-wrap">
+            <div className="flex-1 min-w-[160px]">
+              <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">🖥️ AI Provider</label>
+              <select
+                value={selProvider}
+                onChange={e => { setSelProvider(e.target.value); setSelModel('') }}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
+              >
+                <option value="">Auto (fallback)</option>
+                {PROVIDERS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[160px]">
+              <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">⚡ Model</label>
+              <select
+                value={selModel}
+                onChange={e => setSelModel(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
+              >
+                <option value="">Default</option>
+                {(selProvider
+                  ? PROVIDERS.find(p => p.name === selProvider)?.models || []
+                  : PROVIDERS.flatMap(p => p.models.map(m => ({ ...m, _prov: p.name })))
+                ).map((m: any) => (
+                  <option key={`${m.id}-${m._prov || selProvider}`} value={m.id}>
+                    {m.label}{m._prov ? ` (${m._prov})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="text-xs font-medium text-gray-700 mb-1 block">Max Turns</label>
               <input type="number" min={2} max={30} value={maxTurns} onChange={e => setMaxTurns(+e.target.value)} className="w-20 px-3 py-2 rounded-lg border border-gray-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400" />
             </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => setShowPrompts(!showPrompts)} className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700">📝 Prompts</button>
             <div className="flex-1" />
             {running ? (
@@ -257,6 +410,7 @@ export default function App() {
             )}
           </div>
 
+          {/* Prompts preview */}
           {showPrompts && (
             <div className="grid grid-cols-2 gap-2 p-3 rounded-lg bg-gray-50 border">
               <div className="p-2 rounded bg-blue-50 border border-blue-200">
@@ -270,6 +424,7 @@ export default function App() {
             </div>
           )}
 
+          {/* Quick start */}
           {msgs.length === 0 && !running && (
             <div>
               <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1.5">Quick Start</p>
@@ -284,12 +439,14 @@ export default function App() {
 
         {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">❌ {error}</div>}
 
+        {/* Status */}
         {msgs.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-gray-500 px-1">
+          <div className="flex items-center gap-2 text-xs text-gray-500 px-1 flex-wrap">
             <span className="px-2 py-0.5 rounded-full border border-gray-200 text-[10px]">{msgs.length} turns</span>
             <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px]">🧠 {iCount}</span>
             <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px]">⚡ {eCount}</span>
-            {msgs[0]?.provider && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-[10px]">📡 {msgs[0].provider}</span>}
+            {msgs[0]?.provider && <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 text-[10px]">🖥️ {msgs[0].provider}</span>}
+            {msgs[0]?.model && <span className="px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 text-[10px]">⚡ {msgs[0].model}</span>}
             {done && <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-medium">✅ Task Complete</span>}
           </div>
         )}
@@ -301,11 +458,13 @@ export default function App() {
               {msgs.map((m, i) => (
                 <div key={i} className={`flex ${m.speaker === 'instructor' ? 'justify-start' : 'justify-end'}`}>
                   <div className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${m.speaker === 'instructor' ? 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200/60 rounded-bl-md' : 'bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200/60 rounded-br-md'}`}>
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className="text-base">{m.speaker === 'instructor' ? '🧠' : '⚡'}</span>
                       <span className={`text-xs font-bold ${m.speaker === 'instructor' ? 'text-blue-700' : 'text-emerald-700'}`}>{m.role}</span>
                       <span className="px-1.5 py-0 rounded-full border text-[9px]">Turn {i + 1}</span>
-                      {m.provider && <span className="px-1.5 py-0 rounded-full bg-gray-100 text-[9px]">📡 {m.provider}</span>}
+                      {m.provider && <span className="px-1.5 py-0 rounded-full bg-purple-50 text-purple-600 text-[9px]">🖥️ {m.provider}</span>}
+                      {m.model && <span className="px-1.5 py-0 rounded-full bg-orange-50 text-orange-600 text-[9px]">⚡ {m.model}</span>}
+                      <button onClick={() => navigator.clipboard.writeText(m.content)} className="ml-auto text-gray-400 hover:text-gray-600 text-[10px]">📋</button>
                     </div>
                     <SimpleMarkdown content={m.content.replace(/<TASK_DONE>/g, '**✅ TASK DONE**')} />
                   </div>
@@ -329,7 +488,7 @@ export default function App() {
         {/* Split View */}
         {msgs.length > 0 && view === 'split' && (
           <div className="grid grid-cols-2 gap-3">
-            {['instructor', 'executor'].map(speaker => {
+            {(['instructor', 'executor'] as const).map(speaker => {
               const filtered = msgs.filter(m => m.speaker === speaker)
               const isI = speaker === 'instructor'
               return (
@@ -344,10 +503,19 @@ export default function App() {
                   <div className="p-3 space-y-2 max-h-[45vh] overflow-y-auto">
                     {filtered.map((m, idx) => (
                       <div key={idx} className={`p-3 rounded-xl border ${isI ? 'bg-blue-50/50 border-blue-100' : 'bg-emerald-50/50 border-emerald-100'}`}>
-                        <span className="px-1 py-0 rounded-full border text-[9px]">Turn {msgs.indexOf(m) + 1}</span>
-                        <div className="text-xs leading-relaxed mt-1"><SimpleMarkdown content={m.content.replace(/<TASK_DONE>/g, '**✅ TASK DONE**')} /></div>
+                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                          <span className="px-1 py-0 rounded-full border text-[9px]">Turn {msgs.indexOf(m) + 1}</span>
+                          {m.model && <span className="px-1 py-0 rounded-full bg-orange-50 text-orange-600 text-[9px]">⚡ {m.model}</span>}
+                        </div>
+                        <div className="text-xs leading-relaxed"><SimpleMarkdown content={m.content.replace(/<TASK_DONE>/g, '**✅ TASK DONE**')} /></div>
                       </div>
                     ))}
+                    {running && ((isI && msgs.length % 2 === 0) || (!isI && msgs.length % 2 === 1)) && (
+                      <div className="flex items-center gap-1 text-xs text-gray-400 animate-pulse">
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+                        {isI ? 'Thinking...' : 'Executing...'}
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -362,7 +530,7 @@ export default function App() {
             <div className="grid grid-cols-3 gap-5 text-xs text-gray-500">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 font-medium text-gray-900"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 text-sm font-bold">1</div>Configure</div>
-                <p>Set roles for each agent and describe the mission. The free proxy handles the rest.</p>
+                <p>Set roles, pick your AI provider + model, and describe the mission.</p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 font-medium text-gray-900"><div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 text-sm font-bold">2</div>Dialogue</div>
@@ -376,8 +544,16 @@ export default function App() {
             <hr className="my-4 border-amber-200" />
             <div className="grid grid-cols-2 gap-3 text-xs text-gray-500">
               <div className="p-3 rounded-lg bg-white/80 border border-amber-100">
-                <p className="font-medium text-gray-900 mb-1.5">📡 Free Proxy Providers</p>
-                <div className="flex flex-wrap gap-1">{['Pollinations', 'AirForce', 'G4F', 'LLM7'].map(p => <span key={p} className="px-1.5 py-0.5 rounded bg-gray-100 text-[10px]">{p}</span>)}</div>
+                <p className="font-medium text-gray-900 mb-1.5">📡 Available Providers & Models</p>
+                <div className="space-y-1">
+                  {PROVIDERS.map(p => (
+                    <div key={p.name} className="flex items-center gap-1 flex-wrap">
+                      <span className="px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] font-medium">{p.name}</span>
+                      {p.models.slice(0, 3).map(m => <span key={m.id} className="px-1 py-0.5 rounded bg-gray-100 text-[10px]">{m.label}</span>)}
+                      {p.models.length > 3 && <span className="text-[10px] text-gray-400">+{p.models.length - 3} more</span>}
+                    </div>
+                  ))}
+                </div>
                 <p className="mt-1.5 text-[10px]">No API keys needed. Auto-fallback if one provider is down.</p>
               </div>
               <div className="p-3 rounded-lg bg-white/80 border border-amber-100">
@@ -388,7 +564,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="text-center text-[10px] text-gray-400 pt-2 pb-6">CAMEL Dialogue — Free AI Proxies — No API Keys</div>
+        <div className="text-center text-[10px] text-gray-400 pt-2 pb-6">CAMEL Dialogue — Free AI Proxies — No API Keys — Pick Any Model</div>
       </div>
     </div>
   )
