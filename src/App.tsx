@@ -6,6 +6,7 @@ import BabyAGI from './pages/BabyAGI';
 import MultiAgent from './pages/MultiAgent';
 import PersonaAgent from './pages/PersonaAgent';
 import ComplexAgent from './pages/ComplexAgent';
+import CamelDialogue from './pages/CamelDialogue';
 
 function Router() {
   const [hash, setHash] = useState(window.location.hash || '#/');
@@ -16,7 +17,6 @@ function Router() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  // Scroll to top on route change
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [hash]);
@@ -28,6 +28,7 @@ function Router() {
     case '#/multi-agent': page = <MultiAgent />; break;
     case '#/persona-agent': page = <PersonaAgent />; break;
     case '#/complex-agent': page = <ComplexAgent />; break;
+    case '#/camel-dialogue': page = <CamelDialogue />; break;
     default: page = <Home />; break;
   }
 
